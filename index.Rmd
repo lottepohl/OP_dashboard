@@ -12,6 +12,8 @@ library(knitr)
 library(dplyr)
 library(kableExtra)
 library(etn)
+
+con <- etn::connect_to_etn(Sys.getenv("userid"), Sys.getenv("pwd"))
 ```
 
 Column {data-width=650}
