@@ -36,8 +36,10 @@ jobs:
           R -e "install.packages('remotes')"
           R -e "install.packages('sodium')"
           R -e "install.packages('kableExtra')"
+          R -e "install.packages('dlyr')"
           R -e "install.packages('flexdashboard')"
           R -e "remotes::install_local('encryptedRmd')"
+          R -e "remotes::install_local('etn')"
 
       - name: Render and Encrypt
         run: Rscript render_and_encrypt.R

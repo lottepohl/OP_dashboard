@@ -9,7 +9,9 @@ output:
 ```{r setup, include=FALSE}
 library(flexdashboard)
 library(knitr)
+library(dplyr)
 library(kableExtra)
+library(etn)
 ```
 
 Column {data-width=650}
@@ -31,7 +33,9 @@ Column {data-width=350}
 ### Chart B
 
 ```{r}
-plot(pressure)
+anim <- etn::get_animals(scientific_name = "Raja brachyura")
+
+anim %>% head()
 ```
 
 ### Chart C
