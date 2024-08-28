@@ -42,7 +42,7 @@ jobs:
       - name: Install R packages
         run: |
           # R -e "install.packages(c('sodium', 'kableExtra', 'dplyr', 'flexdashboard', 'remotes'))"
-          R -e "install.packages('flexdashboard', 'remotes'))"
+          R -e "install.packages(c('flexdashboard', 'remotes'))"
           R -e "remotes::install_local('encryptedRmd')"
           R -e "remotes::install_local('etn')"
         env:
