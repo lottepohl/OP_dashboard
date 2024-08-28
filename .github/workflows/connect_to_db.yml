@@ -24,7 +24,7 @@ jobs:
 
       - name: Install R packages
         run: |
-          R -e "install.packages('DBI')"
+          R -e "install.packages(c('DBI', 'RPostgreSQL')"
 
       - name: Connect to Remote PostgreSQL Database
         run: |
