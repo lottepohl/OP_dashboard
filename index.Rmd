@@ -15,8 +15,8 @@ library(etn)
 ```
 
 ```{r connecttoetn}
-# con <- etn::connect_to_etn(Sys.getenv("userid"), Sys.getenv("pwd"))
-con <- etn::connect_to_etn(Sys.getenv("ETN_DB_USERID"), Sys.getenv("ETN_DB_PW"))
+con <- etn::connect_to_etn(Sys.getenv("userid"), Sys.getenv("pwd"))
+# con <- etn::connect_to_etn(Sys.getenv("ETN_DB_USERID"), Sys.getenv("ETN_DB_PW"))
 ```
 
 

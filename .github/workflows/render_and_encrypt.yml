@@ -41,7 +41,8 @@ jobs:
 
       - name: Install R packages
         run: |
-          R -e "install.packages(c('sodium', 'kableExtra', 'dplyr', 'flexdashboard', 'remotes'))"
+          # R -e "install.packages(c('sodium', 'kableExtra', 'dplyr', 'flexdashboard', 'remotes'))"
+          R -e "install.packages('flexdashboard', 'remotes'))"
           R -e "remotes::install_local('encryptedRmd')"
           R -e "remotes::install_local('etn')"
         env:
@@ -51,8 +52,8 @@ jobs:
         run: Rscript render_and_encrypt.R
         env:
           PW_HTML_ENCRYPT: ${{ secrets.PW_HTML_ENCRYPT }}
-          ETN_DB_PW: ${{ secrets.ETN_DB_PW }}
-          ETN_DB_USERID: ${{ secrets.ETN_DB_USERID }}
+          PWD: ${{ secrets.PWD }}
+          USERID: ${{ secrets.USERID }}
 
       - name: Commit and push encrypted file
         run: |
