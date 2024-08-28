@@ -1,0 +1,38 @@
+language: r
+
+sudo: enabled
+
+env:
+  - POSTGRES_USER=postgres POSTGRES_PASSWD= POSTGRES_HOST=localhost POSTGRES_DATABASE=testdb
+
+
+addons:
+  postgresql: "9.6"
+  apt:
+    packages:
+    - postgresql-9.6
+    - postgresql-client-9.6
+    - postgresql-9.6-postgis-2.3
+    - postgresql-server-dev-9.6
+
+apt_packages:
+  - libpq-dev
+
+services:
+  - postgresql
+
+r_packages:
+  - DBI
+
+before_script:
+  - psql -c 'create database testdb;' -U postgres
+before_install:
+  - Rscript -e 'install.packages("DBI");'
+
+install:
+  - sh build_check_with_vars.sh
+  - R CMD INSTALL RPostgreSQL
+
+script:
+  - travis_wait 30 time sh check_with_vars.sh
+
