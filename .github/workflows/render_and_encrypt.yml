@@ -25,8 +25,8 @@ jobs:
         uses: r-lib/actions/setup-r@v2
         
       # install db connection driver
-     - name: Install PostgreSQL ODBC driver
-       run: sudo apt-get install -y odbc-postgresql
+      - name: Install PostgreSQL ODBC driver
+        run: sudo apt-get install -y odbc-postgresql
 
       - name: Cache R packages
         uses: actions/cache@v3
