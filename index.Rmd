@@ -7,14 +7,18 @@ output:
 ---
 
 ```{r setup, include=FALSE}
-library(flexdashboard)
-library(knitr)
-library(dplyr)
-library(kableExtra)
+# library(flexdashboard)
+# library(knitr)
+# library(dplyr)
+# library(kableExtra)
 library(etn)
-
-con <- etn::connect_to_etn(Sys.getenv("userid"), Sys.getenv("pwd"))
 ```
+
+```{r connecttoetn}
+# con <- etn::connect_to_etn(Sys.getenv("userid"), Sys.getenv("pwd"))
+con <- etn::connect_to_etn(Sys.getenv("ETN_DB_USERID"), Sys.getenv("ETN_DB_PW"))
+```
+
 
 Column {data-width=650}
 -----------------------------------------------------------------------

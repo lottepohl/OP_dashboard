@@ -19,7 +19,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libsodium-dev pandoc
+          sudo apt-get install -y libsodium-dev pandoc odbc-postgresql
 
       - name: Set up R
         uses: r-lib/actions/setup-r@v2
@@ -27,19 +27,25 @@ jobs:
       - name: Cache R packages
         uses: actions/cache@v3
         with:
+          # Specify the path to cache
           path: ${{ env.R_LIBS_USER }}
-          key: ${{ runner.os }}-r-${{ hashFiles('**/renv.lock') }}
-          restore-keys: ${{ runner.os }}-r-
+          # Use a key based on OS, R version, and the hash of R scripts and Rmd files
+          key: ${{ runner.os }}-r-${{ hashFiles('**/*.R') }}-${{ hashFiles('**/*.Rmd') }}
+          restore-keys: |
+            ${{ runner.os }}-r-
+      
+      - name: Set up R package library
+        run: mkdir -p ${{ env.R_LIBS_USER }}
+        env:
+          R_LIBS_USER: ${{ runner.os }}/R/${{ matrix.r-version }}
 
       - name: Install R packages
         run: |
-          R -e "install.packages('remotes')"
-          R -e "install.packages('sodium')"
-          R -e "install.packages('kableExtra')"
-          R -e "install.packages('dlyr')"
-          R -e "install.packages('flexdashboard')"
+          R -e "install.packages(c('sodium', 'kableExtra', 'dplyr', 'flexdashboard', 'remotes'))"
           R -e "remotes::install_local('encryptedRmd')"
           R -e "remotes::install_local('etn')"
+        env:
+          R_LIBS_USER: ${{ env.R_LIBS_USER }}
 
       - name: Render and Encrypt
         run: Rscript render_and_encrypt.R
@@ -57,3 +63,65 @@ jobs:
           git push
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+
+
+# name: Render and Encrypt Rmd Weekly
+# 
+# on:
+#   schedule:
+#     - cron: '0 0 * * 0'
+#   workflow_dispatch:
+# 
+# permissions:
+#   contents: write
+# 
+# jobs:
+#   build:
+#     runs-on: ubuntu-latest
+# 
+#     steps:
+#       - name: Checkout repository
+#         uses: actions/checkout@v3
+# 
+#       - name: Install system dependencies
+#         run: |
+#           sudo apt-get update
+#           sudo apt-get install -y libsodium-dev pandoc
+# 
+#       - name: Set up R
+#         uses: r-lib/actions/setup-r@v2
+# 
+#       - name: Cache R packages
+#         uses: actions/cache@v3
+#         with:
+#           path: ${{ env.R_LIBS_USER }}
+#           key: ${{ runner.os }}-r-${{ hashFiles('**/renv.lock') }}
+#           restore-keys: ${{ runner.os }}-r-
+# 
+#       - name: Install R packages
+#         run: |
+#           # R -e "install.packages('remotes')"
+#           # R -e "install.packages('sodium')"
+#           # R -e "install.packages('kableExtra')"
+#           # R -e "install.packages('dlyr')"
+#           # R -e "install.packages('flexdashboard')"
+#           # R -e "remotes::install_local('encryptedRmd')"
+#           R -e "remotes::install_local('etn')"
+# 
+#       - name: Render and Encrypt
+#         run: Rscript render_and_encrypt.R
+#         env:
+#           PW_HTML_ENCRYPT: ${{ secrets.PW_HTML_ENCRYPT }}
+#           ETN_DB_PW: ${{ secrets.ETN_DB_PW }}
+#           ETN_DB_USERID: ${{ secrets.ETN_DB_USERID }}
+# 
+#       - name: Commit and push encrypted file
+#         run: |
+#           git config --global user.name 'github-actions[bot]'
+#           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+#           git add docs/index.html
+#           git commit -m 'Update encrypted HTML'
+#           git push
+#         env:
+#           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
