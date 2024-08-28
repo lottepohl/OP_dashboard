@@ -45,6 +45,8 @@ jobs:
         run: Rscript render_and_encrypt.R
         env:
           PW_HTML_ENCRYPT: ${{ secrets.PW_HTML_ENCRYPT }}
+          ETN_DB_PW: ${{ secrets.ETN_DB_PW }}
+          ETN_DB_USERID: ${{ secrets.ETN_DB_USERID }}
 
       - name: Commit and push encrypted file
         run: |
