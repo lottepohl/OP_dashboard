@@ -23,6 +23,10 @@ jobs:
 
       - name: Set up R
         uses: r-lib/actions/setup-r@v2
+        
+      # install db connection driver
+     - name: Install PostgreSQL ODBC driver
+       run: sudo apt-get install -y odbc-postgresql
 
       - name: Cache R packages
         uses: actions/cache@v3
@@ -42,7 +46,7 @@ jobs:
       - name: Install R packages
         run: |
           # R -e "install.packages(c('sodium', 'kableExtra', 'dplyr', 'flexdashboard', 'remotes'))"
-          R -e "install.packages(c('flexdashboard', 'remotes'))"
+          R -e "install.packages(c('flexdashboard', 'remotes', 'odbc', 'DBI'))"
           R -e "remotes::install_local('encryptedRmd')"
           R -e "remotes::install_local('etn')"
         env:
