@@ -30,7 +30,7 @@ jobs:
         run: |
           Rscript -e "
             library(DBI);
-            pgdrv <- dbDriver(drvName = 'PostgreSQL');
+            pgdrv <- DBI::dbDriver(drvName = 'PostgreSQL');
             con_OPdb <- dbConnect(pgdrv,
                                   dbname='open_protocol',
                                   host='pgetn.vliz.be', 
