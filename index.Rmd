@@ -1,64 +1,1581 @@
 ---
-title: "Flex Dashboard Example"
+title: "OP dashboard"
 output: 
   flexdashboard::flex_dashboard:
-    orientation: columns
-    vertical_layout: fill
+    source_code: embed
+    orientation: rows
+    vertical_layout: scroll
+    theme: 
+      version: 4
+      bootswatch: litera
+editor_options: 
+  chunk_output_type: console
 ---
 
-```{r setup, include=FALSE}
-# library(flexdashboard)
-# library(knitr)
-# library(dplyr)
-# library(kableExtra)
+```{r setup, echo = F, warnings = F, error = F, message = F, include = F}
+knitr::opts_chunk$set(echo = F, warnings = F, error = F, message = F, include = F)
+
+# try to suppress TRUE
+knitr::knit_hooks$set(output = function(x, options) {
+  if (is.logical(x) && length(x) == 1 && x) {
+    return(invisible())
+  }
+  return(x)
+})
+
+library(flexdashboard)
+# rm(list = ls())
+
+# fundamentals
+# library(devtools)
+# devtools::install_github("lifewatch/mregions2")
+library(flexdashboard)
 library(etn)
-library(odbc)
-```
+library(knitr)
+# library(htmltools) # for html components
+# library(shiny)
+library(mregions2)
+# library(leaflet.minicharts)
 
-```{r connecttoetn}
+# data wrangling
+library(readr)
+library(lubridate)
+library(dplyr)
+library(utils)
+library(sf)
+library(tidyr)
 
-connect_to_etn2 <- function(username = Sys.getenv("userid"),
-                           password = Sys.getenv("pwd")) {
-  con <- DBI::dbConnect(
-    odbc::odbc(),
-    "ETN",
-    uid = paste("", tolower(username), "", sep = ""),
-    pwd = paste("", password, "", sep = "")
-  )
-  return(con)
+# maps
+library(leaflet)
+library(leafem)
+library(leaflet.extras)
+
+# plotting and tables
+library(DT) # for interactive tables
+library(ggplot2)
+library(kableExtra)
+library(plotly)
+library(scico) #colour palettes
+# library(gridExtra)
+# library(ggridges)
+
+# SQL queries
+library(DBI)
+library(RPostgreSQL)
+
+# functions
+save_data <- function(data, folder = getwd()){
+  base::saveRDS(data, file = file.path(folder, paste0(deparse(substitute(data)), ".rds")))
 }
 
-con <- connect_to_etn2(Sys.getenv("userid"), Sys.getenv("pwd"))
-# con <- etn::connect_to_etn(Sys.getenv("ETN_DB_USERID"), Sys.getenv("ETN_DB_PW"))
+load_data <- function(filestring, folder = getwd()){
+  data <- base::readRDS(file = file.path(folder, paste0(filestring, ".rds")))
+  return(data)
+}
+
+# folder <- file.path(getwd(), 'Open_protocol') # when not knitting
+folder <- getwd() # when knitting
+```
+
+```{r DBConnections}
+# DATABASE CONNECTIONS
+
+# ETN database connection
+con <- etn::connect_to_etn(Sys.getenv("userid"), Sys.getenv("pwd"))
+
+# OP database connection
+  pgdrv <- dbDriver(drvName = "PostgreSQL")
+  con_OPdb <-DBI::dbConnect(pgdrv,
+                     dbname="open_protocol",
+                     host="pgetn.vliz.be", 
+                     port=5432,
+                     user = Sys.getenv("userid"),
+                     password = Sys.getenv("pwd"))
+  
+  # con_etn <-DBI::dbConnect(pgdrv,
+  #                    dbname="ETN",
+  #                    host="pgetn.vliz.be", 
+  #                    port=5432,
+  #                    user = Sys.getenv("userid"),
+  #                    password = Sys.getenv("pwd"))
+  # 
+  # 
+  # con_etn2 <- DBI::dbConnect(
+  #   odbc::odbc(),
+  #   "ETN",
+  #   uid = paste("", tolower(Sys.getenv("userid")), "", sep = ""),
+  #   pwd = paste("", Sys.getenv("pwd"), "", sep = "")
+  # )
+  # 
+  # connect_to_etn2 <- function(username = Sys.getenv("userid"),
+  #                          password = Sys.getenv("pwd")) {
+  # con <- DBI::dbConnect(
+  #   odbc::odbc(),
+  #   "ETN",
+  #   uid = paste("", tolower(username), "", sep = ""),
+  #   pwd = paste("", password, "", sep = "")
+  # )
+  # return(con)
+  # }
+  # 
+  # con_etn3 <- connect_to_etn2()
+  # 
+  # test <- con_etn2
+
+# EEZs
+# if(file.exists(file.path(folder,'EEZs.rds'))){
+  if(file.exists('EEZs.rds')){
+  EEZs <- load_data("EEZs") #, folder) #only when not knitting
+  mediterranean <- load_data("mediterranean")
+  greater_north_sea <- load_data("greater_north_sea")
+  baltic <- load_data("baltic")
+} else{
+Dutch_EEZ <-  mregions2::gaz_search(5668) %>% mregions2::gaz_geometry()
+BPNS <- mregions2::gaz_search(3293) %>% mregions2::gaz_geometry()
+French_EEZ <- mregions2::gaz_search(5677) %>% mregions2::gaz_geometry()
+UK_EEZ <- mregions2::gaz_search(5696) %>% mregions2::gaz_geometry()
+mediterranean <- mregions2::gaz_search(8552) %>% mregions2::gaz_geometry() %>%
+  dplyr::select(MRGID, placeType, preferredGazetteerName, the_geom) %>% sf::st_make_valid()
+# leaflet() %>% addTiles() %>% addPolygons(data = mediterranean) # finally works
+greater_north_sea <- mregions2::gaz_search(36317) %>% mregions2::gaz_geometry() %>%
+  dplyr::select(MRGID, placeType, preferredGazetteerName, the_geom) %>% sf::st_make_valid()
+baltic <- mregions2::gaz_search(8538) %>% mregions2::gaz_geometry() %>%
+  dplyr::select(MRGID, placeType, preferredGazetteerName, the_geom) %>% sf::st_make_valid()
+leaflet() %>% addTiles() %>% addPolygons(data = baltic)
+
+EEZs <- rbind(Dutch_EEZ, BPNS, French_EEZ, UK_EEZ)
+basins <- rbind(mediterranean, greater_north_sea, baltic)
+
+# save_data(mediterranean, folder)
+# save_data(greater_north_sea, folder)
+# save_data(baltic, folder)
+# save_data(EEZs, folder = folder) 
+
+rm(Dutch_EEZ, BPNS, French_EEZ, UK_EEZ)
+rm(mediterranean, greater_north_sea, baltic)
+}
 ```
 
 
-Column {data-width=650}
+```{r setup-manualinput}
+# do the protocols get updated (very) regularly? Or is there a resource where I could fetch them from somewhere? -> ask Claudia/Stijn
+protocols <- c("A69", "BPSK", "JSATS BPSK", "RO1M", "RO4K", "HS256", "D5256", "564K", "S64K", "5265", "OPI", "OPS", "ACT", "SR1", "MAP200", "MAP76", "JSATS", "R64K", "S256", "OPDI", "OPDS", "R256", "A69-1303", "A69-1105", "A69-1206", "A69-1008", "A69-1303", "A69-9005", "A69-9004", "A69-9002", "A69-9001", "A69-1601", "A69-1602", "A69-1604", "A69-9006", "A69-9007", "A69-1605", "Future Innovasea") %>% unique()
+
+
+status_list <- data.frame(status = c('allocated', 'coupled', 'activated', 'quarantined', 'available', 'recycled', 'blocked')) #, 'manufacturer' # <- need to still understand why there is a status level 'manufacturer'
+
+count_available_IDs <- 1000000
+
+colours_manufacturers <- c("INNOVASEA" = "#E29358", "THELMA BIOTEL" = "#DFE459", "INNOVASEA_OP" = "#7FA867", "LOTEK" = "#73C3D0", "SONOTRONICS" = "#5F2222", "CEFAS" = "#BEA23B")
+```
+
+
+```{r OPIDsSQLqueries}
+# OP ids per status
+
+
+result <- DBI::dbSendQuery(con_OPdb, "
+    SELECT 
+        CASE
+        WHEN o.status = 1 THEN 'allocated'
+        WHEN o.status = 2 THEN 'coupled'
+        WHEN o.status = 3 THEN 'activated'
+        WHEN o.status = 4 THEN 'quarantined'
+        WHEN o.status = 5 THEN 'available'
+        WHEN o.status = 6 THEN 'recycled'
+        WHEN o.status = 7 THEN 'blocked'
+        WHEN o.status = 8 THEN 'manufacturer'
+        ELSE CAST(o.status AS TEXT)  -- Converts status to text if it doesn't match any case
+    END AS status,
+    COUNT(DISTINCT o.opid) AS id_count
+    FROM common.opid o
+    GROUP BY status")
+    
+    # status codes from Stijn Vermaere, email to Lotte 20240718
+  # backup <- fetch(result, n = -1)
+  OP_ids_per_status <- fetch(result, n = -1) %>% # Fetch result from the OPdb request
+    full_join(status_list) %>% #join with list of possible status levels
+    mutate(id_count = replace_na(id_count, 0)) %>% # for all status levels not in the list, assign 'id_count = 0' since no ids have been allocated to that status yet
+    rename(n = id_count) %>% 
+    dplyr::mutate(order = rownames(.) %>% as.numeric(),
+                  status = as.factor(status) %>%
+                    reorder(., -order),
+                  colour = colorRampPalette(c("#14629C", "#199DD8"))(nrow(.))) %>%
+    dplyr::select(!order)
+  
+
+  #save result
+  # save_data(OP_ids_per_status, folder = folder)
+
+  if (!dbHasCompleted(result)) {
+    dbClearResult(result)
+  }
+    rm(result)
+
+
+# OP ids per manufacturer
+result <- DBI::dbSendQuery(con_OPdb, '
+    select o.manufacturer_id, m.name ,count(*) total, count(*) filter(where status = 1)  allocated , count(*) filter(where status = 3) active , count(*) filter(where status = 2) coupled from
+    common.opid o
+    inner join common.order od on o.order1_id = od.id
+    inner join common.manufacturer m on o.manufacturer_id = m.id
+    group by o.manufacturer_id, m.id')
+   
+  OP_ids_per_manuf <- fetch(result, n = -1) %>% # Fetch all results
+    dplyr::filter(!name == "DEVELOP") %>%
+    dplyr::select(!manufacturer_id) %>%
+  {
+    missing_columns <- setdiff(status_list$status, colnames(.)) #check what statuses are in the db result
+    # Add missing columns with a default value of 0
+    if(length(missing_columns) > 0) {
+      mutate(., !!!setNames(rep(list(0), length(missing_columns)), missing_columns)) # fill up result with the statuses not allocated yet
+    } else {
+      .
+    }
+  }
+
+  #save result
+  # save_data(OP_ids_per_manuf, folder = folder)
+
+  if (!dbHasCompleted(result)) {
+    dbClearResult(result)
+  }
+    rm(result)
+
+dbDisconnect(con_OPdb)
+rm(con_OPdb, pgdrv)
+```
+
+
+```{r ETNSQL}
+
+# make new `get_tags()` function that gives back the protocol of the tag
+
+get_tags2 <- function(connection = con,
+                      tag_type = NULL,
+                      tag_subtype = NULL,
+                      tag_serial_number = NULL,
+                      acoustic_tag_id = NULL) {
+  tag_serial_number_query <- "True"
+  tag_type_query <- "True"
+  tag_subtype_query <- "True"
+  acoustic_tag_id_query <- glue::glue_sql(
+    "tag.acoustic_tag_id IN ({acoustic_tag_id*})",
+    .con = connection
+  )
+  # }
+  
+  tag_sql <- glue::glue_sql(
+    readr::read_file(system.file("sql", "tag.sql", package = "etn")),
+    .con = connection
+  )
+  
+  # Build query
+  query <- glue::glue_sql("
+    SELECT
+      tag.tag_serial_number AS tag_serial_number,
+      tag.tag_type AS tag_type,
+      tag.tag_subtype AS tag_subtype,
+      tag.sensor_type AS sensor_type,
+      tag.acoustic_tag_id AS acoustic_tag_id,
+      tag.thelma_converted_code AS acoustic_tag_id_alternative,
+      manufacturer.project AS manufacturer,
+      tag_device.model AS model,
+      tag.frequency AS frequency,
+      tag_status.name AS status,
+      tag_device.activation_date AS activation_date,
+      tag_device.battery_estimated_lifetime AS battery_estimated_life,
+      tag_device.battery_estimated_end_date AS battery_estimated_end_date,
+      tag_device.archive_length AS length,
+      tag_device.archive_diameter AS diameter,
+      tag_device.archive_weight AS weight,
+      tag_device.archive_floating AS floating,
+      tag_device.device_internal_memory AS archive_memory,
+      tag.slope AS sensor_slope,
+      tag.intercept AS sensor_intercept,
+      tag.range AS sensor_range,
+      tag.range_min AS sensor_range_min,
+      tag.range_max AS sensor_range_max,
+      tag.resolution AS sensor_resolution,
+      tag.unit AS sensor_unit,
+      tag.accurency AS sensor_accuracy,
+      tag.sensor_transmit_ratio AS sensor_transmit_ratio,
+      tag.accelerometer_algoritm AS accelerometer_algorithm,
+      tag.accelerometer_samples_per_second AS accelerometer_samples_per_second,
+      CASE
+        WHEN tag_device.owner_group_fk_limited IS NOT NULL THEN owner_organization.name
+        ELSE NULL
+      END AS owner_organization,
+      CASE
+        WHEN tag_device.owner_group_fk_limited IS NOT NULL THEN tag_device.owner_pi
+        ELSE NULL
+      END AS owner_pi,
+      financing_project.projectcode AS financing_project,
+      tag.min_delay AS step1_min_delay,
+      tag.max_delay AS step1_max_delay,
+      tag.power AS step1_power,
+      tag.duration_step1 AS step1_duration,
+      tag.acceleration_on_sec_step1 AS step1_acceleration_duration,
+      tag.min_delay_step2 AS step2_min_delay,
+      tag.max_delay_step2 AS step2_max_delay,
+      tag.power_step2 AS step2_power,
+      tag.duration_step2 AS step2_duration,
+      tag.acceleration_on_sec_step2 AS step2_acceleration_duration,
+      tag.min_delay_step3 AS step3_min_delay,
+      tag.max_delay_step3 AS step3_max_delay,
+      tag.power_step3 AS step3_power,
+      tag.duration_step3 AS step3_duration,
+      tag.acceleration_on_sec_step3 AS step3_acceleration_duration,
+      tag.min_delay_step4 AS step4_min_delay,
+      tag.max_delay_step4 AS step4_max_delay,
+      tag.power_step4 AS step4_power,
+      tag.duration_step4 AS step4_duration,
+      tag.acceleration_on_sec_step4 AS step4_acceleration_duration,
+      tag.tag_id AS tag_id,
+      tag_device.id_pk AS tag_device_id
+      -- tag_device.qc_migration
+      -- tag_device.order_number
+      -- tag_device.external_id
+    FROM ({tag_sql}) AS tag
+      LEFT JOIN common.tag_device_limited AS tag_device
+        ON tag.tag_device_fk = tag_device.id_pk
+        LEFT JOIN common.manufacturer AS manufacturer
+          ON tag_device.manufacturer_fk = manufacturer.id_pk
+        LEFT JOIN common.tag_device_status AS tag_status
+          ON tag_device.tag_device_status_fk = tag_status.id_pk
+        LEFT JOIN common.etn_group AS owner_organization
+          ON tag_device.owner_group_fk_limited = owner_organization.id_pk
+        LEFT JOIN common.projects AS financing_project
+          ON tag_device.financing_project_fk = financing_project.id
+    WHERE
+      {tag_serial_number_query}
+      AND {tag_type_query}
+      AND {tag_subtype_query}
+      AND {acoustic_tag_id_query}
+    ", .con = connection)
+  tags <- DBI::dbGetQuery(connection, query)
+  
+  # Sort data
+  tags <-
+    tags %>%
+    dplyr::arrange(factor(.data$tag_serial_number, levels = list_tag_serial_numbers(connection)))
+  
+  dplyr::as_tibble(tags)
+}
+```
+
+# 1. OP IDs {#opids}
+
+Row
 -----------------------------------------------------------------------
 
-### Chart A
+### {#etn-logo data-width=80}
 
-```{r}
 
-head(mtcars[, 1:4]) %>%
-  knitr::kable(caption = "test caption") %>%
-  kableExtra::kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```{r ETN logo, include=T}
 
+knitr::include_graphics("https://europeantrackingnetwork.org/sites/europeantrackingnetwork.org/files/managed/logo_ETN.png") 
+
+# # Image URL
+# image_url <- "https://europeantrackingnetwork.org/sites/europeantrackingnetwork.org/files/managed/logo_ETN.png"
+# 
+# # Hyperlink URL
+# hyperlink_url <- "https://europeantrackingnetwork.org/en"
+# 
+# # Combine image and hyperlink within an HTML block
+# html_block <- div(
+#   # img(src = image_url, style = "width:70%; height:50%;"),
+#   a(href = hyperlink_url, target = "_blank", "ETN website")
+# )
+# 
+# # Display the HTML block
+# html_block
 ```
 
-Column {data-width=350}
+
+
+### INTRODUCTION {#opids-intro}
+
+This dashboard shows tables and plots related to the European Tracking Network [(ETN)](https://europeantrackingnetwork.org/en) universe. It focuses on Open Protocol IDs (OP IDs), which are created by the Vlaamse Instituut voor de Zee [(VLIZ)](https://www.vliz.be/en) and distributed to manufacturers of acoustic transmitters upon request. Moreover, this dashboard also visualises the share of the Open Protocol equipment (both acoustic tags and acoustic receivers) used by the ETN community (that is, the equipment that is registered in the [ETN database](https://www.lifewatch.be/etn/)).
+
+Row
 -----------------------------------------------------------------------
 
-### Chart B
+### Dashboard structure {#opids-structure}
 
-```{r}
-anim <- etn::get_animals(scientific_name = "Raja brachyura")
+The dashboard features three pages: 1. [OP IDs](#opids-opids), [2. Tags](#tags), and 
+[3. Receivers](#receivers). 
+All plots are interactive. You can zoom in/out, and save .png files by clicking the camera icon in the top right of the plot.
 
-anim %>% head()
+Last data update: `r Sys.Date()`.
+
+Row
+-----------------------------------------------------------------------
+
+### {data-width=300 #opids-opids}
+
+**OP IDs**
+
+The tables and plots below are showing the number of OP IDs for the different status level assigned in the OP database at VLIZ. The table and the barplot show the same information - the number of OP IDs per status currently in the OP database. 
+
+<!-- Row -->
+<!-- ----------------------------------------------------------------------- -->
+
+### OP ID statuses (Table) {data-width=200}
+
+```{r OPIDsperstatusTBL, include=T}
+OP_ids_per_status %>% dplyr::select(!colour) %>%
+  bind_rows(tibble(status = "Total", n = sum(OP_ids_per_status$n))) %>%
+  kbl(caption = "Number of OP IDs per status.") %>%
+  kable_styling(full_width = F) %>%
+  row_spec(row = nrow(OP_ids_per_status) + 1, bold = TRUE, hline_after = TRUE, extra_css = "border-top: 2px solid black;")
 ```
 
-### Chart C
 
-```{r}
-summary(cars)
+### OP ID statuses (Barplot)
+
+<!-- Number of OP IDs per status: -->
+
+```{r OPIDsperstatusBarplot, include=T}
+OP_ids_per_status_p <- ggplot(data = OP_ids_per_status, aes(x = status, y = n)) +
+  geom_col(fill = "grey", width = 0.6, color = NA, linewidth = 0.1) +  # Adjust width and remove border
+  geom_text(aes(label = scales::comma(n, big.mark = " ")),  # Add text with space formatting
+            hjust = 5, vjust = 5, size = 3.5, color = "black") +     # Adjust position and size
+  # geom_bar(stat = "identity", aes(fill = I(colour)), width = 0.6, color = "black", linewidth = 0.2) +  # To create rounded edges effect
+  scale_y_continuous(n.breaks = 8, expand = expansion(mult = c(0, 0.2)),
+                     labels = scales::comma_format(big.mark = " ")) +
+  theme_minimal() +
+  coord_flip()
+
+OP_ids_per_status_p %>% plotly::ggplotly(., tooltip = "text")%>%
+   plotly::style(textposition = "right") %>%
+   plotly::layout(showlegend = FALSE)
 ```
+
+Row
+-----------------------------------------------------------------------
+
+### OP ID statuses per manufacturer {#opids-manuf}
+
+
+```{r, include=T}
+OP_ids_per_manuf %>% 
+  kbl(caption = "Number of OP IDs, per status and manufacturer.") %>%
+  kable_styling()
+
+```
+
+
+# 2. Tags {#tags}
+
+Row
+-----------------------------------------------------------------------
+
+```{r queryTagsETN}
+tags <- etn::get_tags() %>%
+    dplyr::mutate(
+      tag_type2 = tag_type,
+      tag_type = # rename tag types to match with ETN symfony web app
+        ifelse(tag_type == "acoustic", "id-tag",
+               ifelse(tag_type == "acoustic-archival", "sensor-tag",
+                      "archival-tag")),
+      tag_type = tag_type %>% replace(., is.na(.), "combined-tag"),
+      protocol = gsub("-.*$", "", acoustic_tag_id) %>%
+        toupper(),
+      protocol = ifelse(protocol == "G72", "BPSK", protocol),
+      manufacturer = ifelse(manufacturer == "VEMCO", "INNOVASEA", manufacturer), #fuse vemco and innovasea
+      manufacturer = ifelse(manufacturer == "CEFAS TECHNOLOGY LIMITED", "CEFAS", manufacturer), # rename manufacturer CEFAS
+      battery_life_days = battery_estimated_life %>% substring(., 1, 4) %>% as.numeric(),
+      battery_life_months = (battery_life_days / 30.5) %>% round(digits = 0),
+      battery_life_years = (battery_life_days / 365) %>% round(digits = 1)) %>% 
+    dplyr::filter(!tag_subtype %in% c("range", NA)) # filter out 'non-real' tags, i.e. tags that are of subtype 'range' or 'NA'
+
+```
+
+
+### Introduction {#tags-intro}
+
+There currently are `r nrow(tags)` tags uploaded to the ETN database (*not counting tags with* tag_subtype *as one of `NA` or `range`*).
+
+***
+
+**PAGE CONTENTS**
+
+* [status](#tags-status),
+* per [tag type](#tags-type), 
+* per [manufacturer](#tags-manufacturer), 
+* per [protocol](#tags-protocol), and 
+* per [battery life](#tags-battery).
+
+
+Row
+-----------------------------------------------------------------------
+
+### {data-width=350 #tags-status}
+
+**TAG STATUSES**
+
+There are several statuses that a tag can have: *available, active, ended, retrieved, not known*.
+
+The table and barplot to the right both show the number of tags in the ETN database, per status.
+
+
+### Tag statuses (Table) {data-width=200 #tags-status-table}
+
+```{r tagsStatusDF}
+tags_status <- tags %>%
+  dplyr::group_by(status) %>%
+  dplyr::summarise(n = dplyr::n()) %>%
+  dplyr::filter(! status %>% is.na())%>%
+  dplyr::mutate(status = as.factor(status) %>%
+                  reorder(., n)) %>%
+  dplyr::arrange(desc(n)) %>%
+  dplyr::mutate(colour = colorRampPalette(c("#CECECE", "#F8ED2F"))(nrow(.)))
+```
+
+
+```{r tagsStatusTBL, include=T}
+# tags_status TBL
+tags_status %>% dplyr::select(!colour) %>% 
+  bind_rows(tibble(status = "Total", n = sum(tags_status$n))) %>%
+  kbl(
+    col.names = c('tag status', 'n'),
+    caption = "Number of tags per status."
+  ) %>%
+  kable_styling(full_width = F) %>%
+  row_spec(row = nrow(tags_status) + 1, bold = TRUE, hline_after = TRUE, extra_css = "border-top: 2px solid black;")
+```
+
+### Tag statuses (Barplot) {data-width=450 #tags-status-barplot}
+
+<!-- Number of tags per status: -->
+
+```{r tagsStatusBarplot, include=T}
+# tags status BARPLOT
+tags_status_p <- ggplot(data = tags_status, aes(x = status, y = n)) +
+  geom_col(aes(fill = I(colour)), width = 0.6, color = "black", linewidth = 0.1) +  # Adjust width and remove border
+  geom_text(aes(label = scales::comma(n, big.mark = " ")),  # Add text with space formatting
+            hjust = 5, vjust = 5, size = 3.5, color = "black") +     # Adjust position and size
+  # geom_bar(stat = "identity", aes(fill = I(colour)), width = 0.6, color = "black", linewidth = 0.2) +  # To create rounded edges effect
+  scale_y_continuous(n.breaks = 8, expand = expansion(mult = c(0, 0.2)),
+                     labels = scales::comma_format(big.mark = " ")) +
+  theme_minimal() +
+  coord_flip()
+
+tags_status_p %>% plotly::ggplotly(., tooltip = "text")%>%
+   plotly::style(textposition = "right") %>%
+   plotly::layout(showlegend = FALSE)
+```
+
+Row {data-height=20}
+-----------------------------------------------------------------------
+
+###
+
+
+Row
+-----------------------------------------------------------------------
+
+
+### {data-width=350 #tags-tags-type}
+
+**TAG TYPES**
+
+There are four different types of tags in the ETN database: *id, sensor, combined* (i.e., id/sensor plus archival), and *archival*. Archival tags do not transmit signals to acoustic receivers, thus are not subject to the Open Protocol. They are listed simply for reference and comparison.
+
+### Tag types (Table) {data-width=200 #tags-tags-type-table}
+
+```{r tagTypesDF}
+tags_types <- 
+  tags %>% 
+  dplyr::group_by(tag_type) %>% 
+  dplyr::summarise(n = dplyr::n()) %>%
+  dplyr::mutate(tag_type = gsub("-tag$", "", tag_type) %>% as.factor(.) %>%
+                  reorder(., n)) %>%
+  # dplyr::arrange(desc(n)) %>%
+  dplyr::mutate(colour = c("#1F3E70", "#F8ED2F", "#199DD8", "#FF8A00")) %>% # custom colour palette
+  dplyr::arrange(desc(n))
+```
+
+```{r tagTypesTBL, include=T}
+tags_types %>% dplyr::select(!colour) %>%
+  kbl(
+    col.names = c('tag type', 'n'),
+    caption = "Number of tags per tag type."
+  ) %>%
+  kable_styling(full_width = F)
+```
+
+### Tag types (Barplot) {data-width=450 #tags-tags-type-barplot}
+
+<!-- Number of tags per tag type: -->
+
+```{r tagTypesBarplot, include=T}
+# tags types BARPLOT
+tags_types_p <- ggplot(data = tags_types, aes(x = tag_type, y = n)) +
+  geom_col(aes(fill = I(colour)), width = 0.6, color = "black", linewidth = 0.1) +  # Adjust width and remove border
+  geom_text(aes(label = scales::comma(n, big.mark = " ")),  # Add text with space formatting
+            hjust = -0.2, size = 3.5, color = "black") +     # Adjust position and size
+  scale_y_continuous(n.breaks = 8, expand = expansion(mult = c(0, 0.2)),
+                     labels = scales::comma_format(big.mark = " ")) +
+  labs(x = "tag type") +
+  theme_minimal() +
+  coord_flip()
+
+tags_types_p %>% plotly::ggplotly(., tooltip = "text")%>%
+   plotly::style(textposition = "right") %>%
+   plotly::layout(showlegend = FALSE)
+```
+
+Row
+-----------------------------------------------------------------------
+
+### Tag types activated per year
+
+```{r tagTypesPerYrDF}
+# DF TAG TYPES PER YR
+tags_types_per_year <- 
+  tags %>%
+  dplyr::mutate(year = activation_date %>% lubridate::year()) %>%
+  dplyr::group_by(year, tag_type) %>%
+  dplyr::summarise(n = dplyr::n()) %>%
+  dplyr::ungroup() %>%
+  # dplyr::filter(!tag_type == "combined-tag") %>%
+  dplyr::mutate(tag_type = tag_type %>% gsub("-tag$", "", .) %>% as.factor() %>%
+                  reorder(., n)) %>%
+  dplyr::left_join(tags_types %>% dplyr::select(!n), by = "tag_type")
+```
+
+
+```{r tagTypesPerYrBarplot, include=T}
+# BARPLOT TAG TYPES ACTIVATED PER YR
+tags_types_peryear_p <- ggplot(data = tags_types_per_year %>% dplyr::filter((year %>% as.character()) <= (Sys.Date() %>% lubridate::year() %>% as.character())) ) + #
+  geom_bar(aes(x = year, y = n, fill = tag_type), colour = "black",
+           position = 'stack', stat = 'identity', width = 0.75, linewidth = 0.1) +
+  # geom_point(data)
+  scale_y_continuous(n.breaks = 8, expand = c(0,0), labels = scales::comma_format(big.mark = " ")) +
+  scale_x_continuous(n.breaks = tags_types_per_year$year %>% unique() %>% length()) +
+  # scale_x_datetime(date_breaks = "1 year", labels = "'%y") +
+  scale_fill_manual(values = setNames(tags_types_per_year$colour, tags_types_per_year$tag_type)) +  
+  labs(fill = "tag type") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1),
+        legend.position = "top") 
+
+tags_types_peryear_p %>% ggplotly() # the combined tags often have an NA activation date -> search in animal table if there is an activation date
+```
+
+> Above, the numbers of tags activated per year are shown. The colours represent the tag type.
+
+Row {data-height=20}
+-----------------------------------------------------------------------
+
+###
+
+Row 
+-----------------------------------------------------------------------
+
+### {data-width=350 #tags-manufacturer}
+
+**TAG MANUFACTURERS**
+
+Various companies manufacture acoustic tags. The different manufacturers are: `r tags %>% dplyr::select(manufacturer) %>% unique() %>% pull()`. 
+<!-- The following table and plots show the number of tags registered in ETN per manufacturer, and the number of tags activated per year from each manufacturer. -->
+
+
+```{r tagManufacturersDF}
+# DF TAG MANUFACTURERS
+
+tags_manufacturers <- tags %>%
+  dplyr::group_by(manufacturer) %>%
+  dplyr::summarise(n = dplyr::n()) %>%
+  dplyr::filter(! manufacturer %>% is.na()) %>%
+  dplyr::left_join(tibble::enframe(colours_manufacturers, name = "manufacturer", value = "colour"), by = 'manufacturer') %>%
+  dplyr::mutate(manufacturer = as.factor(manufacturer) %>%
+                  reorder(., n)) %>%
+  dplyr::arrange(desc(n))
+```
+
+### Tag Manufacturers (Table) {data-width=200}
+
+```{r tagManufacturersTBL, include=T}
+# tbl tags_manufacturers
+tags_manufacturers %>% dplyr::select(!colour) %>%
+  bind_rows(tibble(manufacturer = "Total", n = sum(tags_manufacturers$n))) %>%
+  kbl(
+    col.names = c('manufacturer', 'n'),
+    caption = "Number of tags, per manufacturer."
+  ) %>%
+  kable_styling(full_width = F) %>%
+  row_spec(row = nrow(tags_manufacturers) + 1, bold = TRUE, hline_after = TRUE, extra_css = "border-top: 2px solid black;")
+
+```
+
+### Tag Manufacturers (Barplot) {data-width=450}
+
+<!-- Number of tags, per manufacturer: -->
+
+```{r tagManufacturersBarplot, include=T}
+# tags_manufacturers_p -> either this or the table!: barplot
+# Distribution of tags among manufacturers listed on the etn database.
+
+# BARPLOT TAG MANUFACTURERS
+tags_manufacturers_p <- ggplot(data = tags_manufacturers, aes(x = manufacturer, y = n)) +
+  geom_col(aes(fill = I(colour)), width = 0.6, color = "black", linewidth = 0.05) +  # Adjust width and remove border
+  geom_text(aes(label = scales::comma(n, big.mark = " ")),  # Add text with space formatting
+            hjust = -0.2, size = 3.5, color = "black") +     # Adjust position and size
+  # geom_bar(stat = "identity", aes(fill = I(colour)), width = 0.6, color = "black", linewidth = 0.2) +  # To create rounded edges effect
+  scale_y_continuous(n.breaks = 8, expand = expansion(mult = c(0, 0.2)),
+                     labels = scales::comma_format(big.mark = " ")) +
+  theme_minimal() +
+  coord_flip()
+
+tags_manufacturers_p %>% plotly::ggplotly(., tooltip = "text")%>%
+   plotly::style(textposition = "right") %>%
+   plotly::layout(showlegend = FALSE)
+```
+
+Row 
+-----------------------------------------------------------------------
+
+### Tag manufacturers activated per year
+
+```{r tagManufacturerPerYrDf}
+tags_manufacturers_per_year <- 
+  tags %>%
+  dplyr::mutate(year = activation_date %>% lubridate::year()) %>%
+  dplyr::group_by(year, manufacturer) %>%
+  dplyr::summarise(n = dplyr::n()) %>%
+  dplyr::ungroup() %>%
+  dplyr::filter(manufacturer %in% tags_manufacturers$manufacturer) %>%
+  # dplyr::arrange(year, desc(n))
+  dplyr::mutate(manufacturer = as.factor(manufacturer) %>%
+                  reorder(., n)) %>%
+  dplyr::left_join(tags_manufacturers %>% dplyr::select(!n), by = "manufacturer")
+```
+
+
+```{r tagManufacturerPerYrBarplot, include=T}
+# tags_manufacturers_per_year_p
+tags_manufacturers_peryear_p <- ggplot(data = tags_manufacturers_per_year %>% dplyr::filter((year %>% as.character()) <= (Sys.Date() %>% lubridate::year() %>% as.character())) ) + #
+  geom_bar(aes(x = year, y = n, fill = manufacturer), color = "black",
+           position = 'stack', stat = 'identity', width = 0.75, linewidth = 0.1) +
+  scale_y_continuous(n.breaks = 8, expand = c(0,0), labels = scales::comma_format(big.mark = " ")) +
+  scale_x_continuous(n.breaks = tags_manufacturers_per_year$year %>% unique() %>% length()) +
+  scale_fill_manual(values = setNames(tags_manufacturers_per_year$colour, tags_manufacturers_per_year$manufacturer)) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1)) 
+
+tags_manufacturers_peryear_p %>% ggplotly()
+```
+> Above, the numbers of tags activated per year are shown. The colours represent the tag manufacturer.
+
+Row {data-height=20}
+-----------------------------------------------------------------------
+
+###
+
+Row 
+-----------------------------------------------------------------------
+
+### {data-width=350 #tags-protocol}
+
+**TAG PROTOCOLS**
+
+The following plots illustrate the distribution of protocols among tags in the ETN database. The overview contains the number of protocols, and the number of protocols activated per year.
+
+
+```{r tagProtocolsDF}
+colours_protocols <- c("OPI" = "#868965", "OPS" = "#C1C28C", "BPSK" = "#E29358", "R64K" = "#2A6C82", "A69" = "#9DC7C9", "S64K" = "#897570", "S256" = "#BEB4B4", "RO1M" = "#50413F")
+
+tags_protocols <- 
+  tags %>%
+  dplyr::filter(protocol %in% protocols) %>%
+  dplyr::group_by(protocol) %>%
+  dplyr::summarise(n = dplyr::n()) %>%
+  
+  # Determine which protocols do not have custom colors
+  dplyr::mutate(has_custom_color = protocol %in% names(colours_protocols)) %>%
+  
+  # Generate colors for those without custom colors
+  dplyr::mutate(colour = if_else(has_custom_color,
+                                 colours_protocols[as.character(protocol)], # Use custom color
+                                 NA_character_)) %>%
+  dplyr::mutate(colour = if_else(is.na(colour), 
+                                 colorRampPalette(c("black", "lightgrey"))(
+                                   sum(!has_custom_color))[match(protocol, protocol[!has_custom_color])], 
+                                 colour)) %>%
+  dplyr::mutate(protocol = as.factor(protocol) %>%
+                  reorder(., n)) %>%
+  dplyr::arrange(desc(n)) %>%
+  dplyr::select(-has_custom_color)
+```
+
+### Tag protocols (Table) {data-width=200}
+
+```{r tagsProtocolsTBL, include=T}
+
+# to do: include NA protocols.
+
+tags_protocols %>% dplyr::select(!colour) %>%
+  bind_rows(tibble(protocol = "Total", n = sum(tags_protocols$n))) %>%
+  kbl(
+    col.names = c('protocol', 'n'),
+    caption = ifelse(nrow(tags_protocols) < nrow(tags), "Number of tags, per protocol. Note: Not all registered tags have a protocol assigned.", "Number of tags, per protocol.")
+  ) %>%
+  kable_styling(full_width = F) %>%
+  row_spec(row = nrow(tags_protocols) + 1, bold = TRUE, hline_after = TRUE, extra_css = "border-top: 2px solid black;")
+
+```
+
+### Tag protocols (Barplot) {data-width=450}
+
+<!-- Number of tags, per protocol: -->
+
+```{r tagProtocolsBarplot, include=T}
+
+# BARPLOT TAG PROTOCOLS
+tags_protocols_p <- ggplot(data = tags_protocols, aes(x = protocol, y = n)) +
+  geom_col(aes(fill = I(colour)), width = 0.6, color = "black", linewidth = 0.05) +  # Adjust width and remove border
+  geom_text(aes(label = scales::comma(n, big.mark = " ")),  # Add text with space formatting
+            hjust = -0.2, size = 3.5, color = "black") +     # Adjust position and size
+  # geom_bar(stat = "identity", aes(fill = I(colour)), width = 0.6, color = "black", linewidth = 0.2) +  # To create rounded edges effect
+  scale_y_continuous(n.breaks = 8, expand = expansion(mult = c(0, 0.2)),
+                     labels = scales::comma_format(big.mark = " ")) +
+  theme_minimal() +
+  coord_flip()
+
+tags_protocols_p %>% plotly::ggplotly(., tooltip = "text")%>%
+   plotly::style(textposition = "right") %>%
+   plotly::layout(showlegend = FALSE)
+```
+
+Row 
+-----------------------------------------------------------------------
+
+### Tag protocols activated per year
+
+```{r tagProtocolsPerYrDF}
+# PROTOCOLs PER YR BARPLOT
+tags_protocols_per_year <- 
+  tags %>%
+  dplyr::mutate(year = activation_date %>% lubridate::year()) %>%
+  dplyr::group_by(year, protocol) %>%
+  dplyr::summarise(n = dplyr::n()) %>%
+  dplyr::ungroup() %>%
+  dplyr::filter(protocol %in% tags_protocols$protocol) %>%
+  # dplyr::arrange(year, desc(n))
+  dplyr::mutate(protocol = as.factor(protocol) %>%
+                  reorder(., n)) %>%
+  dplyr::left_join(tags_protocols %>% dplyr::select(!n), by = "protocol")
+```
+
+```{r tagProtocolsPerYrBarplot, include=T}
+tags_protocols_peryear_p <- 
+  ggplot(data = tags_protocols_per_year %>% dplyr::filter((year %>% as.character()) <= (Sys.Date() %>% lubridate::year() %>% as.character())) ) + #
+  geom_bar(aes(x = year, y = n, fill = protocol), colour = "black",
+           position = 'stack', stat = 'identity', width = 0.75, linewidth = 0.1) +
+  # geom_point(data)
+  scale_y_continuous(n.breaks = 8, expand = c(0,0), labels = scales::comma_format(big.mark = " ")) +
+  scale_x_continuous(n.breaks = tags_protocols_per_year$year %>% unique() %>% length()) +
+  scale_fill_manual(values = setNames(tags_protocols_per_year$colour, tags_protocols_per_year$protocol)) +  
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1)) 
+
+tags_protocols_peryear_p %>% ggplotly() 
+```
+> Above, the numbers of tags activated per year are shown. The colours represent the tag protocol.
+
+Row {data-height=20}
+-----------------------------------------------------------------------
+
+###
+
+Row
+-----------------------------------------------------------------------
+
+### {data-width=250 #tags-battery}
+
+**TAGS BATTERY LIFE**
+
+The following tables and plots show the distribution of tag battery life spans among tags registered in the ETN database. 
+
+```{r tagsBatteryDf}
+tags_battery <- 
+  tags %>%
+  dplyr::mutate(battery_life_years = battery_life_years %>% round(digits = 0),
+                battery_life_years = ifelse(battery_life_years == 0, NA, battery_life_years)) %>%
+  dplyr::group_by(battery_life_years) %>%
+  dplyr::summarise(n = dplyr::n()) %>%
+  dplyr::mutate(battery_life_months = (battery_life_years * 12) %>% round(digits = 0)) %>%
+  dplyr::select(battery_life_months, battery_life_years, n)
+
+```
+
+### Tag battery lives (Table)
+
+```{r tagsBatteryTBL, include=T}
+# tbl tags_battery
+
+tags_battery %>% 
+  mutate(battery_life_months = battery_life_months %>% as.character(),
+         battery_life_years = battery_life_years %>% as.character()) %>%
+  bind_rows(tibble(battery_life_months = "", battery_life_years = "Total", n = sum(tags_battery$n))) %>%
+  kbl(
+    col.names = c('battery life (months)', 'battery life (years)', 'n'),
+    caption = "Number of tags per battery life span."
+  ) %>%
+  kable_styling(full_width = F) %>%
+  row_spec(row = nrow(tags_battery) + 1, bold = TRUE, hline_after = TRUE, extra_css = "border-top: 2px solid black;")
+```
+
+###  Tag battery lives (Barplot)
+
+<!-- Number of tags per battery life: -->
+
+```{r tagsBatteryBARPLOT, include=T}
+# BARPLOT TAG BATTERY LIFE
+tags_battery_p <- ggplot(data = 
+                           tags_battery %>% 
+                           dplyr::mutate(battery_life_years = as.factor(battery_life_years) %>% 
+                                           reorder(., -battery_life_years)),
+                         aes(x = battery_life_years, y = n)) +
+  geom_col(fill = "grey", width = 0.6, color = "black", linewidth = 0.05) +  # Adjust width and remove border
+  geom_text(aes(label = scales::comma(n, big.mark = " ")),  # Add text with space formatting
+            hjust = -0.2, size = 3.5, color = "black") +     # Adjust position and size
+  # geom_bar(stat = "identity", aes(fill = I(colour)), width = 0.6, color = "black", linewidth = 0.2) +  # To create rounded edges effect
+  scale_y_continuous(n.breaks = 8, expand = expansion(mult = c(0, 0.2)),
+                     labels = scales::comma_format(big.mark = " ")) +
+  # scale_x_reverse() +
+  labs(x = "battery life (years)") +
+  theme_minimal() +
+  coord_flip()
+
+tags_battery_p %>% plotly::ggplotly(., tooltip = "text")%>%
+   plotly::style(textposition = "right") %>%
+   plotly::layout(showlegend = FALSE)
+```
+
+Row
+-----------------------------------------------------------------------
+
+### Tag battery lives activated per year
+
+```{r tagBatteryPerYrDF}
+colours_battery_life_group <- tibble(battery_life_years = c("<4 years", "4 to 10 years", ">10 years"),
+                                     colour = c("#3485A0", "#87A95D", "#DFE459"))
+
+# DF TAGS BATTERY LIFE PER YEAR
+tags_battery_life_years_per_year <- 
+  tags %>%
+  dplyr::mutate(year = activation_date %>% lubridate::year(),
+                battery_life_years = battery_life_years %>% round(digits = 0)) %>%
+  dplyr::group_by(year, battery_life_years) %>%
+  dplyr::summarise(n = dplyr::n()) %>%
+  dplyr::mutate(battery_life_years = ifelse(battery_life_years %>% dplyr::between(0,3), '<4 years',
+                                            ifelse(battery_life_years %>% dplyr::between(4,10), "4 to 10 years", ">10 years"))) %>%
+  dplyr::mutate(battery_life_years_group = ifelse(battery_life_years == "<4 years", 1,
+                                                  ifelse(battery_life_years == "4 to 10 years", 2, 3))) %>%
+  tidyr::drop_na()  %>%
+  dplyr::left_join(colours_battery_life_group, by = "battery_life_years")%>%
+  # dplyr::ungroup() %>%
+  # dplyr::filter(battery_life_years %in% tags_battery$battery_life_years) %>% #why??
+  # dplyr::arrange(year, desc(n)) %>%
+  dplyr::arrange(battery_life_years_group) %>%
+  dplyr::mutate(battery_life_years = battery_life_years %>%
+                  as.factor()
+                %>% reorder(., -n)) %>%
+  # dplyr::ungroup() #%>%
+  dplyr::group_by(year, battery_life_years_group) %>%
+  dplyr::summarise(battery_life_years = battery_life_years %>% unique(),
+                   n = n %>% sum(), 
+                   colour = colour %>% unique())
+
+```
+
+
+```{r tagBatteryPerYrBarplot, include=T}
+# tags_battery_life_years_per_year_p
+tags_battery_life_years_peryear_p <- ggplot(data = tags_battery_life_years_per_year %>% dplyr::filter((year %>% as.character()) <= (Sys.Date() %>% lubridate::year() %>% as.character())) %>% dplyr::arrange(battery_life_years_group) ) + #
+  geom_bar(aes(x = year, y = n, fill = battery_life_years),
+           color = "black",
+           position = 'stack', stat = 'identity', width = 0.75, linewidth = 0.1) +
+  # geom_point(data)
+  scale_y_continuous(n.breaks = 8, expand = c(0,0), labels = scales::comma_format(big.mark = " ")) +
+  scale_x_continuous(n.breaks = tags_battery_life_years_per_year$year %>% unique() %>% length()) +
+  # scale_x_datetime(date_breaks = "1 year", labels = "'%y") +
+  scale_fill_manual(values = setNames(tags_battery_life_years_per_year$colour, tags_battery_life_years_per_year$battery_life_years)) +  
+  labs(fill = "battery life", subtitle = "Number of tags activated per year, categorised by battery life.") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1))
+
+tags_battery_life_years_peryear_p %>% ggplotly() 
+```
+
+> Above, the numbers of tags activated per year are shown. The colours represent the tag battery life in three categories.
+
+
+
+# 3. Receivers {#receivers}
+
+Row
+-----------------------------------------------------------------------
+
+### Introduction
+
+This dashboard page shows information on the acoustic receivers in the ETN database as well as details on currently open receiver deployments.
+
+****
+
+**PAGE CONTENTS**
+
+* Details on [receivers owned by each institute](#receivers/receivers-manufacturers),
+* distribution of receiver manufacturers among currently deployed receivers, 
+* open deployments of Europe's main ocean basins (mediterranean, greater north sea, baltic sea),
+* OP compatibility of currently open deployments
+
+```{r receiversOPenabled}
+
+get_acoustic_receivers2 <- function(connection = con,
+                                   receiver_id = NULL,
+                                   status = NULL) {
+  # Check connection
+  # check_connection(connection)
+
+  # Check receiver_id
+  if (is.null(receiver_id)) {
+    receiver_id_query <- "True"
+  } else {
+    valid_receiver_ids <- list_receiver_ids(connection)
+    check_value(receiver_id, valid_receiver_ids, "receiver_id")
+    receiver_id_query <- glue::glue_sql(
+      "receiver.receiver IN ({receiver_id*})",
+      .con = connection
+    )
+  }
+
+  # Check status
+  if (is.null(status)) {
+    status_query <- "True"
+  } else {
+    valid_status <- c("active", "available", "broken", "inactive", "lost", "returned")
+    check_value(status, valid_status, "status")
+    status_query <- glue::glue_sql(
+      "receiver.controlled_status IN ({status*})",
+      .con = connection
+    )
+  }
+
+  receiver_sql <- glue::glue_sql(
+    readr::read_file(system.file("sql", "receiver.sql", package = "etn")),
+    .con = connection
+  )
+  acoustic_tag_id_sql <- glue::glue_sql(
+    readr::read_file(system.file("sql", "acoustic_tag_id.sql", package = "etn")),
+    .con = connection
+  )
+
+  # Build query
+  query <- glue::glue_sql("
+    SELECT
+      receiver.receiver AS receiver_id,
+      manufacturer.project AS manufacturer,
+      receiver.model_number AS receiver_model,
+      receiver.op_enabled AS op_enabled,
+      receiver.serial_number AS receiver_serial_number,
+      receiver.modem_address AS modem_address,
+      receiver.controlled_status AS status,
+      receiver.expected_battery_life AS battery_estimated_life,
+      CASE
+        WHEN receiver.owner_group_fk_limited IS NOT NULL THEN owner_organization.name
+        ELSE NULL
+      END AS owner_organization,
+      financing_project.projectcode AS financing_project,
+      acoustic_tag_id.acoustic_tag_id AS built_in_acoustic_tag_id,
+      receiver.ar_model_number AS ar_model,
+      receiver.ar_serial_number AS ar_serial_number,
+      receiver.ar_expected_battery_life AS ar_battery_estimated_life,
+      receiver.ar_voltage_at_deploy AS ar_voltage_at_deploy,
+      receiver.ar_interrogate_code AS ar_interrogate_code,
+      receiver.ar_receive_frequency AS ar_receive_frequency,
+      receiver.ar_reply_frequency AS ar_reply_frequency,
+      receiver.ar_ping_rate AS ar_ping_rate,
+      receiver.ar_enable_code_address AS ar_enable_code_address,
+      receiver.ar_release_code AS ar_release_code,
+      receiver.ar_disable_code AS ar_disable_code,
+      receiver.ar_tilt_code AS ar_tilt_code,
+      receiver.ar_tilt_after_deploy AS ar_tilt_after_deploy
+      -- receiver.id_pk
+      -- receiver.external_id
+    FROM
+      ({receiver_sql}) AS receiver
+      LEFT JOIN common.manufacturer AS manufacturer
+          ON receiver.manufacturer_fk = manufacturer.id_pk
+      LEFT JOIN common.etn_group AS owner_organization
+        ON receiver.owner_group_fk_limited = owner_organization.id_pk
+      LEFT JOIN common.projects AS financing_project
+        ON receiver.financing_project_fk = financing_project.id
+      LEFT JOIN ({acoustic_tag_id_sql}) AS acoustic_tag_id
+        ON receiver.built_in_tag_device_fk = acoustic_tag_id.tag_device_fk
+    WHERE
+      receiver.receiver_type = 'acoustic_telemetry'
+      AND {receiver_id_query}
+      AND {status_query}
+    ", .con = connection)
+  receivers <- DBI::dbGetQuery(connection, query)
+
+  # Sort data
+  receivers <-
+    receivers %>%
+    dplyr::arrange(.data$receiver_id)
+
+  dplyr::as_tibble(receivers)
+}
+
+```
+
+
+```{r receiversDataQuery}
+deployments <- etn::get_acoustic_deployments(open_only = T)
+
+receivers <- get_acoustic_receivers2()
+
+receivers_institute <- 
+  receivers %>% 
+  dplyr::mutate(
+      manufacturer = ifelse(manufacturer == "VEMCO", "INNOVASEA", manufacturer), #fuse vemco and innovasea
+      manufacturer = ifelse(manufacturer == "CEFAS TECHNOLOGY LIMITED", "CEFAS", manufacturer)) %>%
+  dplyr::group_by(owner_organization, manufacturer) %>%
+  dplyr::summarise(n = dplyr::n()) %>%
+  pivot_wider(names_from = manufacturer, values_from = n) %>%
+  rowwise() %>%
+  mutate(total = sum(c_across(where(is.numeric)), na.rm = TRUE)) %>%
+  ungroup()
+  
+```
+
+
+```{r receiversOP}
+receivers_OP <- receivers %>%
+  dplyr::left_join(deployments %>% select(receiver_id, acoustic_project_code, deploy_date_time),
+                     by = 'receiver_id') %>%
+    dplyr::filter((acoustic_project_code %in% c("ws1", "ws2", "ws3", "bpns") &
+                     manufacturer %in% c("VEMCO", "INNOVASEA") &
+                     deploy_date_time > as.POSIXct("2024-02-01", tz = "UTC")) | #either the op enabled receivers are the ones maintained in the scheldt and the bpns since feb 2024, or the ones listed as op_enabled on the etn symfony web app
+                    receiver_id %in% c("HR2-180K-100-Li-461059", "VR2W-112291", "VR2W-69-134359", "VR2W-7789"))
+
+```
+
+```{r receiversManufacturers}
+deployments_manuf <- 
+  deployments %>%
+  dplyr::left_join(receivers %>%
+                       dplyr::select(
+                         receiver_id, manufacturer, receiver_model, receiver_serial_number, 
+                         status, owner_organization, battery_estimated_life, op_enabled),
+                     by = "receiver_id") %>%
+    dplyr::mutate(manufacturer = ifelse(manufacturer == "VEMCO", "INNOVASEA", manufacturer)) %>%
+    dplyr::filter(!manufacturer == "STAR-ODDI")  %>%
+  dplyr::left_join(tibble::enframe(colours_manufacturers, name = "manufacturer", value = "colour"), by = 'manufacturer')
+
+
+deployments_manuf_sum <-
+  deployments_manuf %>%
+  dplyr::group_by(manufacturer) %>%
+  dplyr::summarise(n = dplyr::n()) %>%
+  dplyr::left_join(tibble::enframe(colours_manufacturers, name = "manufacturer", value = "colour"), by = 'manufacturer') %>%
+  dplyr::mutate(manufacturer = as.factor(manufacturer) %>% reorder(., n)) %>%
+  dplyr::arrange(desc(n))
+  
+
+```
+
+Row
+-----------------------------------------------------------------------
+
+### {data-width=200 #receivers-manufacturers}
+
+**RECEIVERS IN ETN**
+
+The table to the right displays the number of receivers in ETN owned by each institute. 
+
+
+### Receivers owned by each institute, per manufacturer
+
+
+```{r receiversInstituteTBL, include=T}
+
+receivers_institute %>% 
+  bind_rows(receivers_institute %>% dplyr::ungroup() %>%
+  summarise(across(where(is.numeric), sum, na.rm = TRUE)) %>% # calc total numbr of receivers per institute
+  mutate(owner_organization = "total")) %>% 
+  kbl(
+    # col.names = c('protocol', 'n'),
+    caption = "Numbers of receivers registered in ETN by each institute."
+  ) %>%
+  kable_styling(full_width = T) %>%
+  row_spec(row = nrow(receivers_institute) + 1, bold = TRUE, hline_after = TRUE, extra_css = "border-top: 2px solid black;") %>%
+  column_spec(which(names(receivers_institute) == "total"), border_left = TRUE, extra_css = "border-left: 2px solid black;")%>% 
+ scroll_box(height = "400px")
+
+```
+
+Row {data-height=20}
+-----------------------------------------------------------------------
+
+###
+
+
+Row
+-----------------------------------------------------------------------
+
+### {data-width=350}
+
+**CURRENT DEPLOYMENTS**
+
+The following tables and plots show the distribution of manufacturers among current receivers deployments. 
+
+
+### Receiver manufacturers (Table) {data-width=200}
+
+<!-- Number of acoustic receivers currently deployed, per manufacturer. -->
+
+```{r deploymentsManufacturersTBL, include=T}
+# deployments_manuf_sum
+deployments_manuf_sum %>% dplyr::select(!colour) %>%
+  bind_rows(tibble(manufacturer = "Total", n = sum(deployments_manuf_sum$n))) %>%
+  kbl(caption = "Number of receivers currently deployed, per manufacturer.") %>%
+  kable_styling(full_width = F) %>%
+  row_spec(row = nrow(deployments_manuf_sum) + 1, bold = TRUE, hline_after = TRUE, extra_css = "border-top: 2px solid black;")
+```
+
+### Receiver manufacturers (Barplot) {data-width=450}
+
+```{r deploymentsManufacturersBARPLOT, include=T}
+
+deployments_manuf_sum_p <- ggplot(data = deployments_manuf_sum, aes(x = manufacturer, y = n)) +
+  geom_col(aes(fill = I(colour)), width = 0.6, color = "black", linewidth = 0.1) +  # Adjust width and remove border
+  geom_text(aes(label = scales::comma(n, big.mark = " ")),  # Add text with space formatting
+            hjust = 5, vjust = 5, size = 3.5, color = "black") +     # Adjust position and size
+  # geom_bar(stat = "identity", aes(fill = I(colour)), width = 0.6, color = "black", linewidth = 0.2) +  # To create rounded edges effect
+  scale_y_continuous(n.breaks = 8, expand = expansion(mult = c(0, 0.2)),
+                     labels = scales::comma_format(big.mark = " ")) +
+  theme_minimal() +
+  coord_flip()
+
+deployments_manuf_sum_p %>% plotly::ggplotly(., tooltip = "text")%>%
+   plotly::style(textposition = "right") %>%
+   plotly::layout(showlegend = FALSE)
+
+```
+
+Row
+-----------------------------------------------------------------------
+
+### Receiver manufacturers (Map)
+
+```{r MapReceiverManuf, include=T}
+# map_receiver_manuf
+
+# EMODnet Bathymetry layer
+emodnet_tiles <-"https://tiles.emodnet-bathymetry.eu/2020/baselayer/web_mercator/{z}/{x}/{y}.png"
+cite_emodnet <- "<a href='https://emodnet.ec.europa.eu'>EMODnet</a>"
+attr(cite_emodnet, "class") <- c("html", "character")
+
+north.arrow.icon <- 
+  "<img src='https://www.clipartbest.com/cliparts/yTo/Lgr/yToLgryGc.png' style='width:40px;height:50px;'>"
+
+
+# if(file.exists(file.path(folder,"map_receiver_manuf.rds"))){
+# pal <- leaflet::colorFactor(palette = deployments_manuf_sum$colour, domain = deployments_manuf_sum$manufacturer %>% as.character()) # todo: update palette with manuf colours
+
+# manuf gets ordered alphabetically -> find out how to change that (factor order??)
+  
+# legend_manuf <- tibble(manufacturer = deployments_manuf_sum$manufacturer %>% as.character(),
+#                          colour = deployments_manuf_sum$colour)
+
+deployments_manuf_legend <- deployments_manuf %>%
+  dplyr::distinct(manufacturer, colour) %>%
+  arrange(manufacturer)
+  
+map_receiver_manuf <- 
+    leaflet(options = leafletOptions(zoomControl = FALSE)) %>%
+    htmlwidgets::onRender("function(el, x) {
+        L.control.zoom({ position: 'topright' }).addTo(this)
+    }") %>%
+    setView(5.5, 51, zoom = 4) %>%
+    #background
+    addTiles("http://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}", group = "grey") %>%
+    addProviderTiles("Esri.WorldImagery", options = providerTileOptions(opacity = 0.6), group = "satellite") %>%
+    leaflet::addTiles(urlTemplate = emodnet_tiles,
+                      # options = leaflet::tileOptions(tms = FALSE),
+                      attribution = cite_emodnet,
+                      group = "EMODnet") %>%
+    addTiles(group = "OSM") %>%
+    
+    # EEZs
+    # addPolygons(data = EEZs, color = "darkgrey",
+    #             weight = 2,
+    #             opacity = 1.0,
+    #             popup = ~preferredGazetteerName,
+    #             fillOpacity = 0,
+    #             group = "EEZs") %>%
+    
+    #data: deployments per manufacturer
+    addCircleMarkers(data = deployments_manuf,
+                     # clusterOptions = markerClusterOptions(showCoverageOnHover = F, zoomToBoundsOnClick = T, freezeAtZoom = 7),
+                     lat = ~deploy_latitude,
+                     lng = ~deploy_longitude,
+                     radius = 4.5,
+                     color = "black",
+                     weight = 0.25,
+                     fillOpacity = 1,
+                     fillColor = ~colour,
+                     opacity = 1,
+                     popup = ~paste(
+                           "<b>Manufacturer:</b> ", manufacturer, "<br>",
+                           "<b>Station:</b> ", station_name, "<br>",
+                           "<b>Receiver id:</b> ", receiver_id, "<br>",
+                           "<b>Deploy date:</b> ", deploy_date_time, "<br>",
+                           "<b>Deployment id:</b> ", deployment_id, "<br>",
+                           "<b>Mooring:</b> ",mooring_type, "<br>",
+                           "<b>Institute:</b> ", owner_organization, "<br>",
+                           "<b>Battery installation:</b> ", battery_installation_date %>% as.Date(), "<br>",
+                           "<b>Battery end:</b> ", battery_estimated_end_date %>% as.Date(), "<br>"),
+                     # label = ~paste0("manufacturer: ", manufacturer),
+                     group = "receiver manufacturers"
+    ) %>%
+    
+    # layers control
+    addLayersControl(position = "topright" ,
+                     baseGroups = c("grey", "OSM", "EMODnet", "satellite"),
+                     # overlayGroups = c("receiver manufacturers", "OP compatibility"),
+                     options = layersControlOptions(collapsed = FALSE)) %>%
+    # hideGroup(c("OP compatibility")) %>% #"<span style=color:orange># detections</span>")) %>%
+  
+      # add-ons
+    leaflet.extras::addFullscreenControl(position = "topright") %>%
+    leafem::addMouseCoordinates() %>%
+    
+  # legend manufacturers
+  addLegend(position = "bottomleft",
+            labels = deployments_manuf_legend$manufacturer,
+            colors = deployments_manuf_legend$colour,
+            opacity = 1,
+            title = "Receiver Manufacturer",
+            group = "receiver manufacturers") %>%
+  
+    addScaleBar(position = "bottomleft",
+                options = scaleBarOptions(
+                  maxWidth = 150,
+                  imperial = FALSE)) %>%
+  addControl( html = north.arrow.icon,
+                position = "bottomleft",
+                className = "fieldset {border: 0;}") #%>%
+
+map_receiver_manuf
+
+```
+
+> Map showing the distribution of receiver manufacturers among active deployments.
+FYI: You can zoom and pan the map and then take a screenshot (WINDOWS + SHIFT + S).
+
+
+Row 
+-----------------------------------------------------------------------
+
+### Distribution of receiver manufacturers in ocean basins in Europe
+
+The following tables display the numbers of receivers currently displayed in Europe's main ocean basins, per manufacturer.
+
+```{r deployments_manuf_per_basin}
+deployments_manuf_per_basin <-
+  deployments_manuf %>%
+  tidyr::drop_na(., any_of(c("deploy_latitude", "deploy_longitude"))) %>%
+  sf::st_as_sf(., coords = c("deploy_longitude", "deploy_latitude"), crs = 4326) %>%
+  dplyr::mutate(med = sf::st_within(., mediterranean) %>% apply(., 1, any),
+                gns = sf::st_within(., greater_north_sea) %>% apply(., 1, any) ,
+                baltic = sf::st_within(., baltic) %>% apply(., 1, any)) %>%
+  dplyr::left_join(deployments_manuf %>% dplyr::select(deployment_id, deploy_latitude, deploy_longitude),
+                   by = "deployment_id")
+```
+
+
+```{r deployments_manuf_med}
+# deployments_manuf_med
+deployments_manuf_med <- 
+  deployments_manuf_per_basin %>%
+  dplyr::filter(med == TRUE,
+                manufacturer != "STAR-ODDI") %>%
+  dplyr::group_by(manufacturer) %>%
+  dplyr::summarise(n_deployments = dplyr::n()) %>%
+  tibble::as_tibble() %>%
+  dplyr::select(!geometry) %>%
+  dplyr::mutate(manufacturer = manufacturer %>% as.factor() %>% reorder(., n_deployments)) %>%
+  dplyr::arrange(desc(n_deployments))
+
+```
+
+```{r deployments_manuf_baltic}
+# deployments_manuf_baltic
+deployments_manuf_gns <- 
+  deployments_manuf_per_basin %>%
+  dplyr::filter(gns == TRUE,
+                manufacturer != "STAR-ODDI") %>%
+  dplyr::group_by(manufacturer) %>%
+  dplyr::summarise(n_deployments = dplyr::n()) %>%
+  tibble::as_tibble() %>%
+  dplyr::select(!geometry) %>%
+  dplyr::mutate(manufacturer = manufacturer %>% as.factor() %>% reorder(., n_deployments)) %>%
+  dplyr::arrange(desc(n_deployments))
+```
+
+```{r deployments_manuf_gns}
+# deployments_manuf_gns
+deployments_manuf_baltic <- 
+  deployments_manuf_per_basin %>%
+  dplyr::filter(baltic == TRUE,
+                manufacturer != "STAR-ODDI") %>%
+  dplyr::group_by(manufacturer) %>%
+  dplyr::summarise(n_deployments = dplyr::n()) %>%
+  tibble::as_tibble() %>%
+  dplyr::select(!geometry) %>%
+  dplyr::mutate(manufacturer = manufacturer %>% as.factor() %>% reorder(., n_deployments)) %>%
+  dplyr::arrange(desc(n_deployments))
+```
+
+Row
+-----------------------------------------------------------------------
+
+<!-- ### Receiver manufacturers per basin -->
+
+### Mediterranean Sea
+
+```{r recmanufbasin1, include=T}
+deployments_manuf_med %>% bind_rows(tibble(manufacturer = "Total", n_deployments = sum(deployments_manuf_med$n_deployments))) %>%
+  kbl(col.names = c('manufacturer', 'n deployments'),
+    caption = "Distribution of receiver manufacturers in current deployments of the mediterranean sea.") %>%
+  kable_styling(full_width = F) %>%
+  row_spec(row = nrow(deployments_manuf_med) + 1, bold = TRUE, hline_after = TRUE, extra_css = "border-top: 2px solid black;")
+```
+
+### Greater North Sea
+
+```{r recmanufbasin2, include=T}
+deployments_manuf_gns %>% bind_rows(tibble(manufacturer = "Total", n_deployments = sum(deployments_manuf_gns$n_deployments))) %>%
+  kbl(col.names = c('manufacturer', 'n deployments'),
+    caption = "Distribution of receiver manufacturers in current deployments of the greater north sea.") %>%
+  kable_styling(full_width = F) %>%
+  row_spec(row = nrow(deployments_manuf_gns) + 1, bold = TRUE, hline_after = TRUE, extra_css = "border-top: 2px solid black;")
+```
+
+### Baltic Sea
+
+```{r recmanufbasin3, include=T}
+deployments_manuf_baltic %>% bind_rows(tibble(manufacturer = "Total", n_deployments = sum(deployments_manuf_baltic$n_deployments))) %>%
+  kbl(col.names = c('manufacturer', 'n deployments'),
+    caption = "Distribution of receiver manufacturers in current deployments of the baltic sea.") %>%
+  kable_styling(full_width = F) %>%
+  row_spec(row = nrow(deployments_manuf_baltic) + 1, bold = TRUE, hline_after = TRUE, extra_css = "border-top: 2px solid black;")
+```
+
+
+Row {data-height=20} 
+-----------------------------------------------------------------------
+
+###
+
+Row
+-----------------------------------------------------------------------
+
+###
+
+**OP COMPATIBILITY** 
+
+The following map illustrates the compatibility of receivers. In green receivers that listen to OP are shown, in red are receivers that listen to other protocols are shown.
+
+Row
+-----------------------------------------------------------------------
+
+### Receiver OP compatibility
+
+```{r map_receiver_op, include = T}
+# map_receiver_op
+pal_OP <- leaflet::colorFactor(palette = c('red', 'green'), domain = deployments_manuf$op_enabled)
+  
+legend_OP <- tibble(OP = deployments_manuf$op_enabled %>% unique(),
+                      colour = c('red', 'green'))
+  
+map_receiver_OP <- 
+    leaflet(options = leafletOptions(zoomControl = FALSE)) %>%
+    htmlwidgets::onRender("function(el, x) {
+        L.control.zoom({ position: 'topright' }).addTo(this)
+    }") %>%
+    setView(5.5, 51, zoom = 4) %>%
+    #background
+    addTiles("http://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}", group = "grey") %>%
+    addProviderTiles("Esri.WorldImagery", options = providerTileOptions(opacity = 0.6), group = "satellite") %>%
+    leaflet::addTiles(urlTemplate = emodnet_tiles,
+                      # options = leaflet::tileOptions(tms = FALSE),
+                      attribution = cite_emodnet,
+                      group = "EMODnet") %>%
+    addTiles(group = "OSM") %>%
+    
+    #data: deployments that can listen to OP
+    addCircleMarkers(data = deployments_manuf, # %>% dplyr::filter(can_listen_to_OP == TRUE),
+                     # clusterOptions = markerClusterOptions(showCoverageOnHover = F, zoomToBoundsOnClick = T, freezeAtZoom = 7),
+                     lat = ~deploy_latitude,
+                     lng = ~deploy_longitude,
+                     radius = 4, #~((log(n_detections) * 1.5) + 3),
+                     color = "black",
+                     weight = 0.5,
+                     fillOpacity = 1,
+                     fillColor = ~pal_OP(op_enabled),
+                     opacity = 1,
+                     popup = ~paste(
+                           "<b>Manufacturer:</b> ", manufacturer, "<br>",
+                           "<b>OP enabled?:</b> ", op_enabled, "<br>",
+                           "<b>Station:</b> ", station_name, "<br>",
+                           "<b>Receiver id:</b> ", receiver_id, "<br>",
+                           "<b>Deploy date:</b> ", deploy_date_time, "<br>",
+                           "<b>Deployment id:</b> ", deployment_id, "<br>",
+                           "<b>Mooring:</b> ",mooring_type, "<br>",
+                           "<b>Institute:</b> ", owner_organization, "<br>",
+                           "<b>Battery installation:</b> ", battery_installation_date %>% as.Date(), "<br>",
+                           "<b>Battery end:</b> ", battery_estimated_end_date %>% as.Date(), "<br>"),
+                     # label = ~paste0("station ", station_name, ", # detections: ", n_detections, ", # individuals: ", n_individuals),
+                     # popup = ~paste0("lat: ", deploy_latitude, ", lon: ", deploy_longitude),
+                     group = "OP compatibility" # "<span style=color:orange># detections</span>"
+    ) %>%
+    # add-ons
+    leaflet.extras::addFullscreenControl(position = "topright") %>%
+    leafem::addMouseCoordinates() %>%
+    
+    # layers control
+    addLayersControl(position = "topright" ,
+                     baseGroups = c("grey", "OSM", "EMODnet", "satellite"),
+                     # overlayGroups = c("receiver manufacturers", "OP compatibility"),
+                     options = layersControlOptions(collapsed = FALSE)) %>%
+    # hideGroup(c("OP compatibility")) %>% #"<span style=color:orange># detections</span>")) %>%
+  
+    # legend OP yes or no
+    addLegend(position = "bottomleft",
+              labels = legend_OP$OP,
+              colors = legend_OP$colour,
+              opacity = 1,
+              title = "OP combatibility",
+              group = "OP compatibility") %>%
+    addScaleBar(position = "bottomleft",
+                options = scaleBarOptions(
+                  maxWidth = 150,
+                  imperial = FALSE)) %>%
+  addControl( html = north.arrow.icon,
+                position = "bottomleft",
+                className = "fieldset {border: 0;}")
+  
+  map_receiver_OP
+
+```
+
+<!-- statistics per country/ institute?  -->
+

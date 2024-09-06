@@ -24,12 +24,13 @@ jobs:
 
       - name: Install R packages
         run: |
-          R -e "install.packages(c('DBI', 'RPostgreSQL')"
+          R -e "install.packages(c('DBI', 'RPostgreSQL', 'remotes')"
 
       - name: Connect to Remote PostgreSQL Database
         run: |
           Rscript -e "
             library(DBI);
+            library(RPostgreSQL);
             pgdrv <- DBI::dbDriver(drvName = 'PostgreSQL');
             con_OPdb <- dbConnect(pgdrv,
                                   dbname='open_protocol',
